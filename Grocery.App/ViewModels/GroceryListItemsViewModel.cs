@@ -15,14 +15,20 @@ namespace Grocery.App.ViewModels
         private readonly IGroceryListItemsService _groceryListItemsService;
         private readonly IProductService _productService;
         private readonly IFileSaverService _fileSaverService;
-        
+
+        private List<Product> _allProducts = new();
+
         public ObservableCollection<GroceryListItem> MyGroceryListItems { get; set; } = [];
         public ObservableCollection<Product> AvailableProducts { get; set; } = [];
 
         [ObservableProperty]
         GroceryList groceryList = new(0, "None", DateOnly.MinValue, "", 0);
+
         [ObservableProperty]
         string myMessage;
+
+        [ObservableProperty]
+        private string searchText;
 
         public GroceryListItemsViewModel(IGroceryListItemsService groceryListItemsService, IProductService productService, IFileSaverService fileSaverService)
         {
@@ -35,16 +41,25 @@ namespace Grocery.App.ViewModels
         private void Load(int id)
         {
             MyGroceryListItems.Clear();
-            foreach (var item in _groceryListItemsService.GetAllOnGroceryListId(id)) MyGroceryListItems.Add(item);
+            foreach (var item in _groceryListItemsService.GetAllOnGroceryListId(id))
+                MyGroceryListItems.Add(item);
+
             GetAvailableProducts();
         }
 
         private void GetAvailableProducts()
         {
             AvailableProducts.Clear();
+            _allProducts.Clear();
+
             foreach (Product p in _productService.GetAll())
-                if (MyGroceryListItems.FirstOrDefault(g => g.ProductId == p.Id) == null  && p.Stock > 0)
+            {
+                if (MyGroceryListItems.FirstOrDefault(g => g.ProductId == p.Id) == null && p.Stock > 0)
+                {
                     AvailableProducts.Add(p);
+                    _allProducts.Add(p);
+                }
+            }
         }
 
         partial void OnGroceryListChanged(GroceryList value)
@@ -58,6 +73,7 @@ namespace Grocery.App.ViewModels
             Dictionary<string, object> paramater = new() { { nameof(GroceryList), GroceryList } };
             await Shell.Current.GoToAsync($"{nameof(ChangeColorView)}?Name={GroceryList.Name}", true, paramater);
         }
+
         [RelayCommand]
         public void AddProduct(Product product)
         {
@@ -67,6 +83,7 @@ namespace Grocery.App.ViewModels
             product.Stock--;
             _productService.Update(product);
             AvailableProducts.Remove(product);
+            _allProducts.Remove(product); 
             OnGroceryListChanged(GroceryList);
         }
 
@@ -86,5 +103,25 @@ namespace Grocery.App.ViewModels
             }
         }
 
+        [RelayCommand]
+        private void Search(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                AvailableProducts.Clear();
+                foreach (var p in _allProducts)
+                    AvailableProducts.Add(p);
+            }
+            else
+            {
+                var filtered = _allProducts
+                    .Where(p => p.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                AvailableProducts.Clear();
+                foreach (var p in filtered)
+                    AvailableProducts.Add(p);
+            }
+        }
     }
 }
